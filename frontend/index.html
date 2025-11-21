@@ -66,8 +66,14 @@
 
   <script>
     const API_BASE = "/notes/api";
-
     let selectedStudent = null;
+
+    // Crypto
+    let cryptoSaltB64 = null;
+    let dekForUserB64 = null;
+    let dekKey = null;       // CryptoJS WordArray (DEK)
+    let cryptoReady = false;
+
 
     // Logout: kaller /session/end og går til login
     document.getElementById("logout-btn").addEventListener("click", async () => {

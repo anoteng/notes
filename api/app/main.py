@@ -1,3 +1,4 @@
+import ast
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, Cookie
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +19,8 @@ DB_USER = os.getenv("DB_USER", "notes")
 DB_PASS = os.getenv("DB_PASS")  # ingen default!
 DB_NAME = os.getenv("DB_NAME", "notes")
 COOKIE_NAME = os.getenv("COOKIE_NAME", "notes_key")
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS")
+raw = os.getenv("ALLOWED_ORIGINS", "[]")
+ALLOWED_ORIGINS = ast.literal_eval(raw)
 
 MAIL_FROM = os.getenv("NOTES_MAIL_FROM", "no-reply@hh-utdanning.nmbu.no")
 SMTP_HOST = os.getenv("NOTES_SMTP_HOST", "localhost")
@@ -162,7 +164,7 @@ def get_user_from_cookie(notes_key: Optional[str] = Cookie(default=None, alias=C
     if not row:
         raise HTTPException(status_code=401, detail="Invalid session")
     uid, name, email, valid_until, active = row
-    if not active or (isinstance(valid_until, datetime) and valid_until < datetime.utcnow()):
+    if not active or (isinstance(valid_until, datetime) and valid_until < datetime.now(timezone.utc)):
         raise HTTPException(status_code=401, detail="Session expired/inactive")
     return {"id": uid, "name": name, "email": email}
 
@@ -279,7 +281,7 @@ def session_start(body: SessionStartIn, response: Response):
     if not row:
         raise HTTPException(status_code=401, detail="Invalid key")
     _, valid_until, active = row
-    if not active or (isinstance(valid_until, datetime) and valid_until < datetime.utcnow()):
+    if not active or (isinstance(valid_until, datetime) and valid_until < datetime.now(timezone.utc)):
         raise HTTPException(status_code=401, detail="Key expired/inactive")
 
     # Sett cookie – HttpOnly, Secure og fornuftig path
