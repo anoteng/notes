@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <title>Notes – Startside</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/notes/css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <header class="top-bar">
+      <h1>Studentnotater</h1>
+      <button id="logout-btn">Logg ut</button>
+    </header>
+
+    <section class="card">
+      <h2>Finn student</h2>
+      <form id="search-form">
+        <label for="q">Studentnummer:</label>
+        <input type="text" id="q" name="q" placeholder="f.eks. 123456" autocomplete="off">
+        <button type="submit">Søk</button>
+      </form>
+      <p id="search-message" class="message"></p>
+      <ul id="student-list"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Info</h2>
+      <p>
+        Dette er en enkel startside. Neste steg blir å:
+      </p>
+      <ul>
+        <li>hente krypto-konfig (DEK, salt) fra <code>/notes/api/crypto/config</code></li>
+        <li>kryptere/dekryptere notater i nettleseren</li>
+        <li>vise og opprette notater per student</li>
+      </ul>
+    </section>
+  </div>
+
+  <script>
+    const API_BASE = "/notes/api";
+
+    // Logout: kaller /session/end og går til login
+    document.getElementById("logout-btn").addEventListener("click", async () => {
+      try {
+        await fetch(`${API_BASE}/session/end`, {
+          method: "POST",
+          credentials: "include"
+        });
+      } catch (_) {
+        // ignorer feil her
+      }
+      window.location.href = "/notes/login.html";
+    });
+
+    // Søk etter student
+    document.getElementById("search-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const q = document.getElementById("q").value.trim();
+      const msg = document.getElementById("search-message");
+      const list = document.getElementById("student-list");
+      msg.textContent = "";
+      list.innerHTML = "";
+
+      try {
+        const url = q ? `${API_BASE}/students?q=${encodeURIComponent(q)}` : `${API_BASE}/students`;
+        const resp = await fetch(url, {
+          method: "GET",
+          credentials: "include"
+        });
+
+        if (resp.status === 401) {
+          // Ikke logget inn → gå til login
+          window.location.href = "/notes/login.html";
+          return;
+        }
+
+        if (!resp.ok) {
+          msg.textContent = "Feil ved henting av studenter.";
+          msg.classList.add("error");
+          return;
+        }
+
+        const data = await resp.json();
+        if (!data.length) {
+          msg.textContent = "Ingen studenter funnet.";
+          msg.classList.remove("error");
+          msg.classList.add("info");
+          return;
+        }
+
+        data.forEach(st => {
+          const li = document.createElement("li");
+          li.textContent = `${st.stud_nr} ${st.graduated ? "(avsluttet)" : ""}`;
+          li.classList.add("student-item");
+          li.addEventListener("click", () => {
+            // Senere kan vi ha en egen /notes/student.html?id=...
+            // Foreløpig bare logge
+            console.log("Valgt student:", st);
+          });
+          list.appendChild(li);
+        });
+
+      } catch (err) {
+        console.error(err);
+        msg.textContent = "Klarte ikke å kontakte tjeneren.";
+        msg.classList.add("error");
+      }
+    });
+  </script>
+</body>
+</html>

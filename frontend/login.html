@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <title>Notes – Logg inn</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/notes/css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Studentnotater</h1>
+
+    <section class="card">
+      <h2>Logg inn med nøkkel</h2>
+      <form id="login-form">
+        <label for="key">Innloggingsnøkkel (fra e-post):</label>
+        <input type="text" id="key" name="key" required minlength="8" autocomplete="off">
+        <button type="submit">Logg inn</button>
+      </form>
+      <p id="login-message" class="message"></p>
+    </section>
+
+    <section class="card">
+      <h2>Få ny magisk lenke</h2>
+      <p>Skriv inn e-postadressen din for å få tilsendt en ny lenke/nøkkel.</p>
+      <form id="magic-link-form">
+        <label for="email">E-post:</label>
+        <input type="email" id="email" name="email" required autocomplete="email">
+        <button type="submit">Send magisk lenke</button>
+      </form>
+      <p id="magic-message" class="message"></p>
+    </section>
+
+    <p class="small">
+      Ny bruker? <a href="/notes/register.html">Registrer deg</a>
+    </p>
+  </div>
+
+  <script>
+    const API_BASE = "/notes/api";
+
+    // Logg inn med nøkkel → /session/start
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const key = document.getElementById("key").value.trim();
+      const msg = document.getElementById("login-message");
+      msg.textContent = "";
+
+      try {
+        const resp = await fetch(`${API_BASE}/session/start`, {
+          method: "POST",
+          credentials: "include", // VIKTIG: send/ta imot cookie
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key })
+        });
+
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          msg.textContent = data.detail || "Innlogging feilet.";
+          msg.classList.add("error");
+          return;
+        }
+
+        msg.textContent = "Innlogging OK – sender deg videre …";
+        msg.classList.remove("error");
+        msg.classList.add("success");
+
+        // Gå til startside
+        window.location.href = "/notes/index.html";
+      } catch (err) {
+        console.error(err);
+        msg.textContent = "Klarte ikke å kontakte tjeneren.";
+        msg.classList.add("error");
+      }
+    });
+
+    // “Get magic link” – denne forutsetter et API-endepunkt du lager selv
+    // f.eks. POST /notes/api/magic-link { email }
+    document.getElementById("magic-link-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("email").value.trim();
+      const msg = document.getElementById("magic-message");
+      msg.textContent = "";
+
+      try {
+        const resp = await fetch(`${API_BASE}/magic-link`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email })
+        });
+
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          msg.textContent = data.detail || "Klarte ikke å sende lenke.";
+          msg.classList.add("error");
+          return;
+        }
+
+        msg.textContent = "Hvis e-posten finnes i systemet, får du snart en lenke.";
+        msg.classList.remove("error");
+        msg.classList.add("success");
+      } catch (err) {
+        console.error(err);
+        msg.textContent = "Klarte ikke å kontakte tjeneren.";
+        msg.classList.add("error");
+      }
+    });
+  </script>
+</body>
+</html>
