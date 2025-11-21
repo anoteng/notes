@@ -143,6 +143,11 @@ class RegisterOut(BaseModel):
     message: str
     api_key: Optional[str] = None  # nyttig for testing/dev
 
+class StudentCreateIn(BaseModel):
+    stud_nr: str = Field(..., min_length=6, max_length=6)
+    graduated: bool = False
+
+
 
 def get_user_from_cookie(notes_key: Optional[str] = Cookie(default=None, alias=COOKIE_NAME)):
     if not notes_key:
@@ -445,3 +450,32 @@ def set_dek(body: DekUpdateIn, user=Depends(get_user_from_cookie)):
 
     return {"ok": True}
 
+@app.post("/students")
+def create_student(body: StudentCreateIn, user=Depends(get_user_from_cookie)):
+    stud_nr = body.stud_nr.strip()
+    graduated = 1 if body.graduated else 0
+
+    with db() as conn:
+        cur = conn.cursor()
+
+        # Sjekk om studentnummer allerede finnes
+        cur.execute(
+            "SELECT id FROM students WHERE stud_nr=%s",
+            (stud_nr,)
+        )
+        row = cur.fetchone()
+        if row:
+            raise HTTPException(status_code=400, detail="Studentnummeret finnes allerede.")
+
+        # Opprett student
+        cur.execute(
+            "INSERT INTO students (stud_nr, graduated) VALUES (%s, %s)",
+            (stud_nr, graduated)
+        )
+        student_id = cur.lastrowid
+
+    return {
+        "id": student_id,
+        "stud_nr": stud_nr,
+        "graduated": bool(graduated),
+    }
