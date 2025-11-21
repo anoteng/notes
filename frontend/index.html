@@ -13,6 +13,24 @@
       <button id="logout-btn">Logg ut</button>
     </header>
 
+    <!-- Seksjon: Opprett ny student -->
+    <section class="card">
+      <h2>Ny student</h2>
+      <form id="create-student-form">
+        <label for="new-studnr">Studentnummer:</label>
+        <input type="text" id="new-studnr" name="new-studnr" required maxlength="16" autocomplete="off">
+
+        <label>
+          <input type="checkbox" id="new-graduated">
+          Har fullført (avsluttet)
+        </label>
+
+        <button type="submit">Opprett student</button>
+      </form>
+      <p id="create-student-message" class="message"></p>
+    </section>
+
+    <!-- Seksjon: Søk etter student -->
     <section class="card">
       <h2>Finn student</h2>
       <form id="search-form">
@@ -24,21 +42,32 @@
       <ul id="student-list"></ul>
     </section>
 
-    <section class="card">
-      <h2>Info</h2>
-      <p>
-        Dette er en enkel startside. Neste steg blir å:
-      </p>
-      <ul>
-        <li>hente krypto-konfig (DEK, salt) fra <code>/notes/api/crypto/config</code></li>
-        <li>kryptere/dekryptere notater i nettleseren</li>
-        <li>vise og opprette notater per student</li>
-      </ul>
+    <!-- Seksjon: Notater for valgt student -->
+    <section class="card" id="notes-section" style="display:none;">
+      <h2>Notater for student <span id="selected-student-label"></span></h2>
+
+      <div id="notes-list-container">
+        <h3>Eksisterende notater</h3>
+        <ul id="notes-list"></ul>
+        <p id="notes-message" class="message"></p>
+      </div>
+
+      <div id="notes-create-container">
+        <h3>Nytt notat</h3>
+        <form id="create-note-form">
+          <label for="note-text">Notat (midlertidig i klartekst, IKKE sensitive data ennå):</label>
+          <textarea id="note-text" name="note-text" rows="4" style="width:100%;"></textarea>
+          <button type="submit">Lagre notat</button>
+        </form>
+        <p id="create-note-message" class="message"></p>
+      </div>
     </section>
   </div>
 
   <script>
     const API_BASE = "/notes/api";
+
+    let selectedStudent = null;
 
     // Logout: kaller /session/end og går til login
     document.getElementById("logout-btn").addEventListener("click", async () => {
@@ -47,10 +76,63 @@
           method: "POST",
           credentials: "include"
         });
-      } catch (_) {
-        // ignorer feil her
-      }
+      } catch (_) {}
       window.location.href = "/notes/login.html";
+    });
+
+    // Opprett ny student
+    document.getElementById("create-student-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const studNrInput = document.getElementById("new-studnr");
+      const gradInput = document.getElementById("new-graduated");
+      const msg = document.getElementById("create-student-message");
+      msg.textContent = "";
+      msg.className = "message";
+
+      const stud_nr = studNrInput.value.trim();
+      const graduated = gradInput.checked;
+
+      if (!stud_nr) {
+        msg.textContent = "Studentnummer kan ikke være tomt.";
+        msg.classList.add("error");
+        return;
+      }
+
+      try {
+        const resp = await fetch(`${API_BASE}/students`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stud_nr, graduated })
+        });
+
+        const data = await resp.json().catch(() => ({}));
+
+        if (resp.status === 401) {
+          window.location.href = "/notes/login.html";
+          return;
+        }
+
+        if (!resp.ok) {
+          msg.textContent = data.detail || "Kunne ikke opprette student.";
+          msg.classList.add("error");
+          return;
+        }
+
+        msg.textContent = `Student ${data.stud_nr} opprettet (id ${data.id}).`;
+        msg.classList.add("success");
+        studNrInput.value = "";
+        gradInput.checked = false;
+
+        // Oppdater søkelista ved å trigge et nytt søk på stud_nr
+        document.getElementById("q").value = data.stud_nr;
+        document.getElementById("search-form").dispatchEvent(new Event("submit"));
+
+      } catch (err) {
+        console.error(err);
+        msg.textContent = "Klarte ikke å kontakte tjeneren.";
+        msg.classList.add("error");
+      }
     });
 
     // Søk etter student
@@ -60,6 +142,7 @@
       const msg = document.getElementById("search-message");
       const list = document.getElementById("student-list");
       msg.textContent = "";
+      msg.className = "message";
       list.innerHTML = "";
 
       try {
@@ -70,7 +153,6 @@
         });
 
         if (resp.status === 401) {
-          // Ikke logget inn → gå til login
           window.location.href = "/notes/login.html";
           return;
         }
@@ -84,7 +166,6 @@
         const data = await resp.json();
         if (!data.length) {
           msg.textContent = "Ingen studenter funnet.";
-          msg.classList.remove("error");
           msg.classList.add("info");
           return;
         }
@@ -94,12 +175,151 @@
           li.textContent = `${st.stud_nr} ${st.graduated ? "(avsluttet)" : ""}`;
           li.classList.add("student-item");
           li.addEventListener("click", () => {
-            // Senere kan vi ha en egen /notes/student.html?id=...
-            // Foreløpig bare logge
-            console.log("Valgt student:", st);
+            setSelectedStudent(st);
           });
           list.appendChild(li);
         });
+
+      } catch (err) {
+        console.error(err);
+        msg.textContent = "Klarte ikke å kontakte tjeneren.";
+        msg.classList.add("error");
+      }
+    });
+
+    function setSelectedStudent(st) {
+      selectedStudent = st;
+      document.getElementById("selected-student-label").textContent =
+        `${st.stud_nr} (id ${st.id})`;
+      document.getElementById("notes-section").style.display = "block";
+
+      // Nullstill meldinger
+      document.getElementById("notes-message").textContent = "";
+      document.getElementById("notes-message").className = "message";
+      document.getElementById("create-note-message").textContent = "";
+      document.getElementById("create-note-message").className = "message";
+
+      loadNotesForSelectedStudent();
+    }
+
+    async function loadNotesForSelectedStudent() {
+      const list = document.getElementById("notes-list");
+      const msg = document.getElementById("notes-message");
+      list.innerHTML = "";
+      msg.textContent = "";
+      msg.className = "message";
+
+      if (!selectedStudent) return;
+
+      try {
+        const resp = await fetch(`${API_BASE}/notes/${selectedStudent.id}`, {
+          method: "GET",
+          credentials: "include"
+        });
+
+        if (resp.status === 401) {
+          window.location.href = "/notes/login.html";
+          return;
+        }
+
+        if (!resp.ok) {
+          msg.textContent = "Kunne ikke hente notater.";
+          msg.classList.add("error");
+          return;
+        }
+
+        const data = await resp.json();
+
+        if (!data.length) {
+          msg.textContent = "Ingen notater for denne studenten ennå.";
+          msg.classList.add("info");
+          return;
+        }
+
+        data.forEach(n => {
+          const li = document.createElement("li");
+          // Foreløpig viser vi bare ciphertext_b64
+          // Når vi får kryptering på plass, erstatter vi dette med dekryptert tekst
+          li.textContent = `[${n.created}] ${n.ciphertext_b64.substring(0, 60)}...`;
+          li.classList.add("note-item");
+          list.appendChild(li);
+        });
+
+      } catch (err) {
+        console.error(err);
+        msg.textContent = "Klarte ikke å kontakte tjeneren.";
+        msg.classList.add("error");
+      }
+    }
+
+    // Opprett nytt notat for valgt student
+    document.getElementById("create-note-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const msg = document.getElementById("create-note-message");
+      msg.textContent = "";
+      msg.className = "message";
+
+      if (!selectedStudent) {
+        msg.textContent = "Velg en student først.";
+        msg.classList.add("error");
+        return;
+      }
+
+      const textarea = document.getElementById("note-text");
+      const plaintext = textarea.value.trim();
+
+      if (!plaintext) {
+        msg.textContent = "Notatet kan ikke være tomt.";
+        msg.classList.add("error");
+        return;
+      }
+
+      // Midlertidig: lag "fake kryptering" ved å base64-enkode plaintext.
+      // Dette ER IKKE ekte sikkerhet – kun for å teste flyten.
+      // Når vi legger inn crypto senere, bytter vi dette ut med AES-GCM.
+      const ciphertext_b64 = btoa(unescape(encodeURIComponent(plaintext)));
+
+      // Nonce er påkrevd i APIet – vi sender random bytes nå,
+      // men uten at de brukes til noe. Byttes ut når vi får ekte crypto.
+      const nonce = window.crypto.getRandomValues(new Uint8Array(12));
+      let nonceStr = "";
+      for (let i = 0; i < nonce.length; i++) {
+        nonceStr += String.fromCharCode(nonce[i]);
+      }
+      const nonce_b64 = btoa(nonceStr);
+
+      try {
+        const resp = await fetch(`${API_BASE}/notes`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            student_id: selectedStudent.id,
+            ciphertext_b64,
+            nonce_b64,
+            encryption_version: 1
+          })
+        });
+
+        const data = await resp.json().catch(() => ({}));
+
+        if (resp.status === 401) {
+          window.location.href = "/notes/login.html";
+          return;
+        }
+
+        if (!resp.ok) {
+          msg.textContent = data.detail || "Kunne ikke lagre notat.";
+          msg.classList.add("error");
+          return;
+        }
+
+        msg.textContent = "Notat lagret.";
+        msg.classList.add("success");
+        textarea.value = "";
+
+        // Last notater på nytt
+        loadNotesForSelectedStudent();
 
       } catch (err) {
         console.error(err);
