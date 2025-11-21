@@ -37,6 +37,18 @@
   </div>
 
   <script>
+    // Hvis det finnes ?key= i URL, fyll inn og auto-submit
+    (function () {
+        const params = new URLSearchParams(window.location.search);
+        const keyFromUrl = params.get("key");
+        if (keyFromUrl) {
+            const keyInput = document.getElementById("key");
+            keyInput.value = keyFromUrl;
+            // Send skjemaet automatisk
+            document.getElementById("login-form").dispatchEvent(new Event("submit"));
+        }
+    })();
+
     const API_BASE = "/notes/api";
 
     // Logg inn med nøkkel → /session/start
