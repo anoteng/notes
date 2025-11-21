@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List
 import pymysql
+import base64
 import os
 from datetime import datetime
 from contextlib import contextmanager
@@ -15,6 +16,14 @@ DB_PASS = os.getenv("DB_PASS")  # ingen default!
 DB_NAME = os.getenv("DB_NAME", "notes")
 COOKIE_NAME = os.getenv("COOKIE_NAME", "notes_key")
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS")
+
+def b64encode(b: bytes) -> str:
+    return base64.b64encode(b).decode("ascii")
+
+
+def b64decode(s: str) -> bytes:
+    return base64.b64decode(s.encode("ascii"))
+
 
 app = FastAPI(title="Notes API")
 
@@ -42,12 +51,23 @@ class SessionStartIn(BaseModel):
 
 class NoteCreateIn(BaseModel):
     student_id: int
-    # Hele krypteringspayloaden som JSON-streng (lagres som-is)
-    # F.eks: {"alg":"AES-GCM","kdf":"PBKDF2","salt":"...b64...","iv":"...b64...","ciphertext":"...b64...","ver":1}
-    note_json: str = Field(..., min_length=10)
+    ciphertext_b64: str = Field(..., min_length=10)
+    nonce_b64: str = Field(..., min_length=10)
+    encryption_version: int = 1
+
 
 class NoteUpdateIn(BaseModel):
-    note_json: str = Field(..., min_length=10)
+    ciphertext_b64: str = Field(..., min_length=10)
+    nonce_b64: str = Field(..., min_length=10)
+    encryption_version: int = 1
+
+class CryptoConfigOut(BaseModel):
+    crypto_salt_b64: str
+    dek_for_user_b64: Optional[str]
+
+class DekUpdateIn(BaseModel):
+    dek_for_user_b64: str = Field(..., min_length=10)
+
 
 def get_user_from_cookie(notes_key: Optional[str] = Cookie(default=None, alias=COOKIE_NAME)):
     if not notes_key:
@@ -116,39 +136,63 @@ def list_notes(student_id: int, user=Depends(get_user_from_cookie)):
     with db() as conn:
         cur = conn.cursor()
         cur.execute("""
-            SELECT n.id, n.owner, n.student, n.note, n.timestamp, n.updated
+            SELECT n.id, n.owner, n.student, n.note_ciphertext, n.nonce,
+                   n.created_at, n.updated_at, n.encryption_version
             FROM notes n
-            WHERE n.student=%s AND n.owner=%s
+            WHERE n.student=%s AND n.owner=%s AND n.deleted = 0
             ORDER BY n.id DESC
         """, (student_id, user["id"]))
         rows = cur.fetchall()
-    return [
-        {
-            "id": rid, "owner": owner, "student": student,
-            "note_json": note, "created": ts, "updated": up
-        }
-        for (rid, owner, student, note, ts, up) in rows
-    ]
+
+    result = []
+    for (rid, owner, student, note_ciphertext, nonce, created, updated, enc_ver) in rows:
+        result.append({
+            "id": rid,
+            "owner": owner,
+            "student": student,
+            "ciphertext_b64": note_ciphertext,           # lagres som tekst i DB
+            "nonce_b64": b64encode(nonce) if nonce else None,
+            "created": created,
+            "updated": updated,
+            "encryption_version": enc_ver,
+        })
+
+    return result
 
 @app.post("/notes")
 def create_note(body: NoteCreateIn, user=Depends(get_user_from_cookie)):
+    nonce_bytes = b64decode(body.nonce_b64)
+
     with db() as conn:
         cur = conn.cursor()
         # Sikre at student finnes
         cur.execute("SELECT id FROM students WHERE id=%s", (body.student_id,))
         if not cur.fetchone():
             raise HTTPException(status_code=404, detail="Student not found")
+
         cur.execute(
-            "INSERT INTO notes (owner, student, note) VALUES (%s,%s,%s)",
-            (user["id"], body.student_id, body.note_json)
+            """
+            INSERT INTO notes (owner, student, note_ciphertext, nonce, encryption_version)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (user["id"], body.student_id, body.ciphertext_b64, nonce_bytes, body.encryption_version)
         )
         note_id = cur.lastrowid
-        cur.execute("SELECT timestamp, updated FROM notes WHERE id=%s", (note_id,))
-        ts, up = cur.fetchone()
-    return {"id": note_id, "created": ts, "updated": up}
+        cur.execute("SELECT created_at, updated_at FROM notes WHERE id=%s", (note_id,))
+        created, updated = cur.fetchone()
+
+    return {
+        "id": note_id,
+        "created": created,
+        "updated": updated,
+        "encryption_version": body.encryption_version,
+    }
+
 
 @app.put("/notes/{note_id}")
 def update_note(note_id: int, body: NoteUpdateIn, user=Depends(get_user_from_cookie)):
+    nonce_bytes = b64decode(body.nonce_b64)
+
     with db() as conn:
         cur = conn.cursor()
         cur.execute("SELECT owner FROM notes WHERE id=%s", (note_id,))
@@ -157,17 +201,72 @@ def update_note(note_id: int, body: NoteUpdateIn, user=Depends(get_user_from_coo
             raise HTTPException(status_code=404, detail="Note not found")
         if row[0] != user["id"]:
             raise HTTPException(status_code=403, detail="Not your note")
-        cur.execute("UPDATE notes SET note=%s WHERE id=%s", (body.note_json, note_id))
-        cur.execute("SELECT updated FROM notes WHERE id=%s", (note_id,))
-        up = cur.fetchone()[0]
-    return {"id": note_id, "updated": up}
+
+        cur.execute(
+            """
+            UPDATE notes
+            SET note_ciphertext=%s, nonce=%s, encryption_version=%s
+            WHERE id=%s
+            """,
+            (body.ciphertext_b64, nonce_bytes, body.encryption_version, note_id)
+        )
+        cur.execute("SELECT updated_at FROM notes WHERE id=%s", (note_id,))
+        updated = cur.fetchone()[0]
+
+    return {"id": note_id, "updated": updated, "encryption_version": body.encryption_version}
+
 
 @app.delete("/notes/{note_id}")
 def delete_note(note_id: int, user=Depends(get_user_from_cookie)):
     with db() as conn:
         cur = conn.cursor()
-        cur.execute("DELETE FROM notes WHERE id=%s AND owner=%s", (note_id, user["id"]))
+        cur.execute(
+            "UPDATE notes SET deleted = 1 WHERE id=%s AND owner=%s",
+            (note_id, user["id"])
+        )
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Note not found or not yours")
+    return {"ok": True}
+
+
+@app.get("/crypto/config", response_model=CryptoConfigOut)
+def get_crypto_config(user=Depends(get_user_from_cookie)):
+    with db() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT crypto_salt, dek_for_user FROM users WHERE id=%s",
+            (user["id"],)
+        )
+        row = cur.fetchone()
+
+    crypto_salt, dek_for_user = row if row else (None, None)
+
+    # Generer crypto_salt hvis mangler
+    if crypto_salt is None:
+        crypto_salt = os.urandom(16)
+        with db() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE users SET crypto_salt=%s WHERE id=%s",
+                (crypto_salt, user["id"])
+            )
+
+    return CryptoConfigOut(
+        crypto_salt_b64=b64encode(crypto_salt),
+        dek_for_user_b64=b64encode(dek_for_user) if dek_for_user is not None else None,
+    )
+
+
+@app.post("/crypto/dek")
+def set_dek(body: DekUpdateIn, user=Depends(get_user_from_cookie)):
+    dek_bytes = b64decode(body.dek_for_user_b64)
+
+    with db() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE users SET dek_for_user=%s WHERE id=%s",
+            (dek_bytes, user["id"])
+        )
+
     return {"ok": True}
 
