@@ -13,73 +13,102 @@
         <button id="logout-btn">Logg ut</button>
     </header>
 
-    <!-- Seksjon: Krypteringspassord -->
-    <section class="card">
-        <h2>Krypteringspassord</h2>
-        <p>
-            Velg et passord som brukes til å låse opp og kryptere notatene dine.
-            Passordet sendes aldri til tjeneren.
-        </p>
-        <form id="crypto-form">
-            <label for="crypto-password">Passord:</label>
-            <input type="password" id="crypto-password" autocomplete="off">
-            <button type="submit">Lås opp</button>
-        </form>
-        <p id="crypto-message" class="message"></p>
-    </section>
+    <div class="layout">
+        <!-- VENSTRE KOLONNE -->
+        <aside class="sidebar">
+            <!-- Sist brukte studenter -->
+            <section class="card">
+                <h2>Sist brukte</h2>
+                <p class="small">De siste studentene du har vært inne på.</p>
+                <ul id="recent-student-list"></ul>
+                <p id="recent-message" class="message"></p>
+            </section>
 
-    <!-- Seksjon: Opprett ny student -->
-    <section class="card">
-        <h2>Ny student</h2>
-        <form id="create-student-form">
-            <label for="new-studnr">Studentnummer:</label>
-            <input type="text" id="new-studnr" name="new-studnr" required maxlength="16" autocomplete="off">
+            <!-- Søk etter student -->
+            <section class="card">
+                <h2>Finn student</h2>
+                <form id="search-form">
+                    <label for="q">Studentnummer:</label>
+                    <input type="text" id="q" name="q" placeholder="f.eks. 123456" autocomplete="off">
+                    <button type="submit">Søk</button>
+                </form>
+                <p id="search-message" class="message"></p>
+                <ul id="student-list"></ul>
+            </section>
 
-            <label>
-                <input type="checkbox" id="new-graduated">
-                Har fullført (avsluttet)
-            </label>
+            <!-- Ny student (kollapsbar) -->
+            <section class="card">
+                <h2>Ny student</h2>
+                <details id="new-student-details">
+                    <summary>Opprett ny student</summary>
+                    <form id="create-student-form">
+                        <label for="new-studnr">Studentnummer:</label>
+                        <input type="text" id="new-studnr" name="new-studnr" required maxlength="16" autocomplete="off">
 
-            <button type="submit">Opprett student</button>
-        </form>
-        <p id="create-student-message" class="message"></p>
-    </section>
+                        <label>
+                            <input type="checkbox" id="new-graduated">
+                            Har fullført (avsluttet)
+                        </label>
 
-    <!-- Seksjon: Søk etter student -->
-    <section class="card">
-        <h2>Finn student</h2>
-        <form id="search-form">
-            <label for="q">Studentnummer:</label>
-            <input type="text" id="q" name="q" placeholder="f.eks. 123456" autocomplete="off">
-            <button type="submit">Søk</button>
-        </form>
-        <p id="search-message" class="message"></p>
-        <ul id="student-list"></ul>
-    </section>
+                        <button type="submit">Opprett student</button>
+                    </form>
+                    <p id="create-student-message" class="message"></p>
+                </details>
+            </section>
+        </aside>
 
-    <!-- Seksjon: Notater for valgt student -->
-    <section class="card" id="notes-section" style="display:none;">
-        <h2>Notater for student <span id="selected-student-label"></span></h2>
+        <!-- HØYRE KOLONNE -->
+        <main class="main-panel">
+            <!-- Krypteringspassord -->
+            <section class="card">
+                <h2>Krypteringspassord</h2>
+                <p>
+                    Velg et passord som brukes til å låse opp og kryptere notatene dine.
+                    Passordet sendes aldri til tjeneren.
+                </p>
+                <form id="crypto-form">
+                    <label for="crypto-password">Passord:</label>
+                    <input type="password" id="crypto-password" autocomplete="off">
+                    <button type="submit">Lås opp</button>
+                </form>
+                <p id="crypto-message" class="message"></p>
+            </section>
 
-        <div id="notes-list-container">
-            <h3>Eksisterende notater</h3>
-            <ul id="notes-list"></ul>
-            <p id="notes-message" class="message"></p>
-        </div>
+            <!-- Notater for valgt student -->
+            <section class="card" id="notes-section" style="display:none;">
+                <h2>Notater for student <span id="selected-student-label"></span></h2>
 
-        <div id="notes-create-container">
-            <h3>Nytt notat</h3>
-            <form id="create-note-form">
-                <label for="note-text">Notat:</label>
-                <textarea id="note-text" name="note-text" rows="4" style="width:100%;"></textarea>
-                <button type="submit">Lagre notat</button>
-            </form>
-            <p id="create-note-message" class="message"></p>
-        </div>
-    </section>
+                <!-- Studentstatus (graduated) -->
+                <div class="student-meta">
+                    <label>
+                        <input type="checkbox" id="selected-student-graduated">
+                        Har fullført (avsluttet)
+                    </label>
+                    <button id="update-student-graduated-btn">Oppdater status</button>
+                </div>
+                <p id="update-student-message" class="message"></p>
+
+                <div id="notes-list-container">
+                    <h3>Eksisterende notater</h3>
+                    <ul id="notes-list"></ul>
+                    <p id="notes-message" class="message"></p>
+                </div>
+
+                <div id="notes-create-container">
+                    <h3>Nytt notat</h3>
+                    <form id="create-note-form">
+                        <label for="note-text">Notat:</label>
+                        <textarea id="note-text" name="note-text" rows="4" style="width:100%;"></textarea>
+                        <button type="submit">Lagre notat</button>
+                    </form>
+                    <p id="create-note-message" class="message"></p>
+                </div>
+            </section>
+        </main>
+    </div>
 </div>
 
-<!-- JS flyttet ut i egne filer -->
+<!-- JS -->
 <script src="/notes/js/crypto.js"></script>
 <script src="/notes/js/main.js"></script>
 </body>
