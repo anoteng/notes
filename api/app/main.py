@@ -267,7 +267,7 @@ def session_start(body: SessionStartIn, response: Response):
     with db() as conn:
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, valid_until, active FROM users WHERE `key`=%s",
+            "SELECT id, valid_until, active FROM users WHERE `api_key`=%s",
             (body.key,)
         )
         row = cur.fetchone()
