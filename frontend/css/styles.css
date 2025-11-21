@@ -5,12 +5,6 @@ body {
   color: #222;
 }
 
-.container {
-  max-width: 700px;
-  margin: 2rem auto;
-  padding: 0 1rem;
-}
-
 .top-bar {
   display: flex;
   justify-content: space-between;
@@ -93,4 +87,51 @@ button:hover {
 
 .student-item:hover {
   background: #eff6ff;
+}
+/* Layout med venstre/høyre kolonne */
+
+.container {
+    max-width: 1100px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+
+.layout {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.sidebar {
+    flex: 0 0 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.main-panel {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* Student-meta (graduated-status) */
+
+.student-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.4rem;
+}
+
+/* Responsivt: på små skjermer → én kolonne */
+
+@media (max-width: 800px) {
+    .layout {
+        flex-direction: column;
+    }
+    .sidebar {
+        flex: 1 1 auto;
+    }
 }

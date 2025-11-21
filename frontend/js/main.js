@@ -4,6 +4,8 @@
     var API_BASE = "/notes/api";
     var selectedStudent = null;
 
+    var RECENT_KEY = "notes_recent_students";  // lagres i localStorage
+
     function $(id) {
         return document.getElementById(id);
     }
@@ -16,6 +18,76 @@
         if (kind) {
             el.classList.add(kind);
         }
+    }
+
+    // --- Local "sist brukte"-lagring (kun i nettleser) ---
+
+    function loadRecentStudents() {
+        try {
+            var raw = window.localStorage.getItem(RECENT_KEY);
+            if (!raw) return [];
+            var data = JSON.parse(raw);
+            if (!Array.isArray(data)) return [];
+            return data;
+        } catch (e) {
+            console.error("Kunne ikke lese recent students:", e);
+            return [];
+        }
+    }
+
+    function saveRecentStudents(list) {
+        try {
+            window.localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+        } catch (e) {
+            console.error("Kunne ikke lagre recent students:", e);
+        }
+    }
+
+    function updateRecentListUI() {
+        var listEl = $("recent-student-list");
+        var msgId = "recent-message";
+        if (!listEl) return;
+
+        listEl.innerHTML = "";
+        setMessage(msgId, "", null);
+
+        var list = loadRecentStudents();
+        if (!list.length) {
+            setMessage(msgId, "Ingen studenter i historikken ennå.", "info");
+            return;
+        }
+
+        list.forEach(function (st) {
+            var li = document.createElement("li");
+            li.textContent = st.stud_nr + (st.graduated ? " (avsluttet)" : "");
+            li.classList.add("student-item");
+            li.addEventListener("click", function () {
+                // Når vi henter fra localStorage, har vi bare id/stud_nr/graduated.
+                // Det holder for å sette selectedStudent og starte notatvisning.
+                setSelectedStudent(st);
+            });
+            listEl.appendChild(li);
+        });
+    }
+
+    function addStudentToRecent(st) {
+        if (!st || !st.id) return;
+
+        var list = loadRecentStudents();
+        // Fjern hvis allerede i lista
+        list = list.filter(function (x) { return x.id !== st.id; });
+        // Legg først
+        list.unshift({
+            id: st.id,
+            stud_nr: st.stud_nr,
+            graduated: !!st.graduated
+        });
+        // Maks 10
+        if (list.length > 10) {
+            list = list.slice(0, 10);
+        }
+        saveRecentStudents(list);
+        updateRecentListUI();
     }
 
     // --- Logout ---
@@ -83,7 +155,13 @@
                 studNrInput.value = "";
                 gradInput.checked = false;
 
-                // Oppdater søkefeltet og trigge søk
+                // Lukk details om ønskelig
+                var det = $("new-student-details");
+                if (det && det.open) {
+                    det.open = false;
+                }
+
+                // Oppdater søkefelt og trigge søk
                 var qInput = $("q");
                 if (qInput) {
                     qInput.value = data.stud_nr;
@@ -158,19 +236,76 @@
 
     function setSelectedStudent(st) {
         selectedStudent = st;
+
         var label = $("selected-student-label");
         if (label) {
             label.textContent = st.stud_nr + " (id " + st.id + ")";
         }
+
         var notesSection = $("notes-section");
         if (notesSection) {
             notesSection.style.display = "block";
         }
 
+        var gradCheckbox = $("selected-student-graduated");
+        if (gradCheckbox) {
+            gradCheckbox.checked = !!st.graduated;
+        }
+
         setMessage("notes-message", "", null);
         setMessage("create-note-message", "", null);
+        setMessage("update-student-message", "", null);
 
+        addStudentToRecent(st);
         loadNotesForSelectedStudent();
+    }
+
+    // --- Oppdater graduated-status for valgt student ---
+
+    function setupUpdateStudentGraduated() {
+        var btn = $("update-student-graduated-btn");
+        if (!btn) return;
+
+        btn.addEventListener("click", function () {
+            var msgId = "update-student-message";
+            setMessage(msgId, "", null);
+
+            if (!selectedStudent) {
+                setMessage(msgId, "Velg en student først.", "error");
+                return;
+            }
+
+            var gradCheckbox = $("selected-student-graduated");
+            var graduated = !!(gradCheckbox && gradCheckbox.checked);
+
+            fetch(API_BASE + "/students/" + selectedStudent.id, {
+                method: "PUT",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ graduated: graduated })
+            }).then(function (resp) {
+                return resp.json()
+                    .catch(function () { return {}; })
+                    .then(function (data) {
+                        if (resp.status === 401) {
+                            window.location.href = "/notes/login.html";
+                            throw new Error("Unauthorized");
+                        }
+                        if (!resp.ok) {
+                            var msg = data.detail || "Kunne ikke oppdatere student.";
+                            throw new Error(msg);
+                        }
+                        return data;
+                    });
+            }).then(function (data) {
+                selectedStudent.graduated = data.graduated;
+                setMessage(msgId, "Status oppdatert.", "success");
+                addStudentToRecent(selectedStudent); // oppdatere teksten i "sist brukte"
+            }).catch(function (err) {
+                console.error(err);
+                setMessage(msgId, err.message || "Feil ved oppdatering av status.", "error");
+            });
+        });
     }
 
     // --- Hent notater for valgt student ---
@@ -330,6 +465,8 @@
         setupCreateStudent();
         setupSearchStudents();
         setupCreateNote();
+        setupUpdateStudentGraduated();
+        updateRecentListUI();
     }
 
     if (document.readyState === "loading") {
