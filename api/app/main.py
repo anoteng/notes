@@ -150,7 +150,7 @@ def get_user_from_cookie(notes_key: Optional[str] = Cookie(default=None, alias=C
     with db() as conn:
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, name, email, valid_until, active FROM users WHERE `key`=%s",
+            "SELECT id, name, email, valid_until, active FROM users WHERE `api_key`=%s",
             (notes_key,)
         )
         row = cur.fetchone()
