@@ -284,6 +284,7 @@ def session_start(body: SessionStartIn, response: Response):
     if not row:
         raise HTTPException(status_code=401, detail="Invalid key")
     _, valid_until, active = row
+    valid_until = valid_until.replace(tzinfo=timezone.utc)
     if not active or (isinstance(valid_until, datetime) and valid_until < datetime.now(timezone.utc)):
         raise HTTPException(status_code=401, detail="Key expired/inactive")
 
