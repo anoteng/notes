@@ -17,6 +17,13 @@ DB_NAME = os.getenv("DB_NAME", "notes")
 COOKIE_NAME = os.getenv("COOKIE_NAME", "notes_key")
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS")
 
+MAIL_FROM = os.getenv("NOTES_MAIL_FROM", "no-reply@hh-utdanning.nmbu.no")
+SMTP_HOST = os.getenv("NOTES_SMTP_HOST", "localhost")
+SMTP_PORT = int(os.getenv("NOTES_SMTP_PORT", "25"))
+SMTP_USER = os.getenv("NOTES_SMTP_USER")  # kan være None
+SMTP_PASS = os.getenv("NOTES_SMTP_PASS")  # kan være None
+SMTP_STARTTLS = os.getenv("NOTES_SMTP_STARTTLS", "false").lower() == "true"
+
 def b64encode(b: bytes) -> str:
     return base64.b64encode(b).decode("ascii")
 
@@ -24,6 +31,11 @@ def b64encode(b: bytes) -> str:
 def b64decode(s: str) -> bytes:
     return base64.b64decode(s.encode("ascii"))
 
+# Brukes til å lage lenke i e-posten
+PUBLIC_BASE_URL = os.getenv(
+    "NOTES_PUBLIC_BASE_URL",
+    "https://hh-utdanning.nmbu.no/notes/login.html"
+)
 
 app = FastAPI(title="Notes API")
 
