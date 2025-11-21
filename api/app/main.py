@@ -167,6 +167,7 @@ def get_user_from_cookie(notes_key: Optional[str] = Cookie(default=None, alias=C
     if not row:
         raise HTTPException(status_code=401, detail="Invalid session")
     uid, name, email, valid_until, active = row
+    valid_until = valid_until.replace(tzinfo=timezone.utc)
     if not active or (isinstance(valid_until, datetime) and valid_until < datetime.now(timezone.utc)):
         raise HTTPException(status_code=401, detail="Session expired/inactive")
     return {"id": uid, "name": name, "email": email}
