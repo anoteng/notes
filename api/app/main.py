@@ -109,6 +109,9 @@ Studentnotatsystemet
             server.login(SMTP_USER, SMTP_PASS)
         server.send_message(msg)
 
+class StudentUpdateIn(BaseModel):
+    graduated: bool
+
 class SessionStartIn(BaseModel):
     key: str = Field(..., min_length=8)
 
@@ -481,3 +484,24 @@ def create_student(body: StudentCreateIn, user=Depends(get_user_from_cookie)):
         "stud_nr": stud_nr,
         "graduated": bool(graduated),
     }
+@app.put("/students/{student_id}")
+def update_student(student_id: int, body: StudentUpdateIn, user=Depends(get_user_from_cookie)):
+    with db() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, stud_nr, graduated FROM students WHERE id=%s",
+            (student_id,)
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Student not found")
+
+        cur.execute(
+            "UPDATE students SET graduated=%s WHERE id=%s",
+            (1 if body.graduated else 0, student_id)
+        )
+
+        return {
+            "id": student_id,
+            "graduated": body.graduated,
+        }
