@@ -26,15 +26,16 @@
 
             <!-- Søk etter student -->
             <section class="card">
-                <h2>Finn student</h2>
+                <h2>Oppslag student</h2>
                 <form id="search-form">
                     <label for="q">Studentnummer:</label>
                     <input type="text" id="q" name="q" placeholder="f.eks. 123456" autocomplete="off">
-                    <button type="submit">Søk</button>
+                    <button type="submit">Slå opp</button>
                 </form>
                 <p id="search-message" class="message"></p>
                 <ul id="student-list"></ul>
             </section>
+
 
             <!-- Ny student (kollapsbar) -->
             <section class="card">
@@ -55,13 +56,24 @@
                     <p id="create-student-message" class="message"></p>
                 </details>
             </section>
+            <!-- Innstillinger -->
+            <section class="card">
+                <h2>Innstillinger</h2>
+                <button id="change-password-link" type="button">
+                    Endre krypteringspassord
+                </button>
+            </section>
+
         </aside>
 
         <!-- HØYRE KOLONNE -->
         <main class="main-panel">
             <!-- Krypteringspassord -->
-            <section class="card">
-                <h2>Krypteringspassord</h2>
+            <section class="card" id="crypto-section">
+                <h2>
+                    Krypteringspassord
+                    <span id="crypto-status" class="status-pill status-locked">Låst</span>
+                </h2>
                 <p>
                     Velg et passord som brukes til å låse opp og kryptere notatene dine.
                     Passordet sendes aldri til tjeneren.
@@ -73,8 +85,9 @@
                 </form>
                 <p id="crypto-message" class="message"></p>
             </section>
+
             <!-- Endre krypteringspassord -->
-            <section class="card">
+            <section class="card" style="display:none;" id="change-password-section">
                 <h2>Endre krypteringspassord</h2>
                 <p>
                     Bruk dette når du vil bytte passord uten å miste eksisterende notater.

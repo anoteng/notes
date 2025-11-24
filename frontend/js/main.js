@@ -176,8 +176,70 @@
             });
         });
     }
+    // Vis forslag om å opprette student når oppslag ikke gir treff
+    function showCreateFromLookup(studNr) {
+        var msgId = "search-message";
+        var list = $("student-list");
+        if (list) list.innerHTML = "";
 
-    // --- Søk etter student ---
+        var msgEl = $(msgId);
+        setMessage(msgId, "Fant ingen student med nummer " + studNr + ".", "info");
+
+        if (!msgEl) return;
+
+        // Fjern tidligere knapp hvis den finnes
+        var oldBtn = document.getElementById("create-from-lookup-btn");
+        if (oldBtn && oldBtn.parentNode === msgEl) {
+            msgEl.removeChild(oldBtn);
+        }
+
+        var btn = document.createElement("button");
+        btn.id = "create-from-lookup-btn";
+        btn.type = "button";
+        btn.textContent = "Opprett student " + studNr;
+        btn.style.marginTop = "0.5rem";
+
+        btn.addEventListener("click", function () {
+            // Opprett student med dette nummeret, graduated=false
+            fetch(API_BASE + "/students", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ stud_nr: studNr, graduated: false })
+            }).then(function (resp) {
+                return resp.json()
+                    .catch(function () { return {}; })
+                    .then(function (data) {
+                        if (resp.status === 401) {
+                            window.location.href = "/notes/login.html";
+                            throw new Error("Unauthorized");
+                        }
+                        if (!resp.ok) {
+                            var m = data.detail || "Kunne ikke opprette student.";
+                            throw new Error(m);
+                        }
+                        return data;
+                    });
+            }).then(function (data) {
+                // Oppdater "sist brukte" og sett som valgt student
+                setMessage(msgId, "Student " + data.stud_nr + " opprettet.", "success");
+                var st = {
+                    id: data.id,
+                    stud_nr: data.stud_nr,
+                    graduated: !!data.graduated
+                };
+                setSelectedStudent(st);
+            }).catch(function (err) {
+                console.error(err);
+                setMessage(msgId, err.message || "Feil ved oppretting av student.", "error");
+            });
+        });
+
+        msgEl.appendChild(btn);
+    }
+
+
+    // --- Oppslag student (på eksakt studentnummer) ---
 
     function setupSearchStudents() {
         var form = $("search-form");
@@ -193,10 +255,12 @@
             setMessage(msgId, "", null);
             if (list) list.innerHTML = "";
 
-            var url = API_BASE + "/students";
-            if (q) {
-                url += "?q=" + encodeURIComponent(q);
+            if (!q) {
+                setMessage(msgId, "Skriv inn et studentnummer for oppslag.", "error");
+                return;
             }
+
+            var url = API_BASE + "/students?q=" + encodeURIComponent(q);
 
             fetch(url, {
                 method: "GET",
@@ -207,16 +271,26 @@
                     throw new Error("Unauthorized");
                 }
                 if (!resp.ok) {
-                    throw new Error("Feil ved henting av studenter.");
+                    throw new Error("Feil ved oppslag av student.");
                 }
                 return resp.json();
             }).then(function (data) {
                 if (!data || !data.length) {
-                    setMessage(msgId, "Ingen studenter funnet.", "info");
+                    // Ingen treff → foreslå å opprette
+                    showCreateFromLookup(q);
                     return;
                 }
 
-                data.forEach(function (st) {
+                // Prioriter eksakt treff på stud_nr
+                var exact = data.filter(function (st) { return st.stud_nr === q; });
+                var listToUse = exact.length ? exact : data;
+
+                if (listToUse.length === 0) {
+                    showCreateFromLookup(q);
+                    return;
+                }
+
+                listToUse.forEach(function (st) {
                     var li = document.createElement("li");
                     li.textContent = st.stud_nr + (st.graduated ? " (avsluttet)" : "");
                     li.classList.add("student-item");
@@ -225,6 +299,11 @@
                     });
                     list.appendChild(li);
                 });
+
+                // Hvis vi har nøyaktig én eksakt match → velg den direkte
+                if (exact.length === 1) {
+                    setSelectedStudent(exact[0]);
+                }
             }).catch(function (err) {
                 console.error(err);
                 setMessage(msgId, err.message || "Klarte ikke å kontakte tjeneren.", "error");
@@ -431,6 +510,14 @@
         var form = $("crypto-form");
         if (!form) return;
 
+        // initial status
+        var statusEl = $("crypto-status");
+        if (statusEl) {
+            statusEl.textContent = "Låst";
+            statusEl.classList.remove("status-unlocked");
+            statusEl.classList.add("status-locked");
+        }
+
         form.addEventListener("submit", function (e) {
             e.preventDefault();
 
@@ -446,6 +533,21 @@
             CryptoNotes.initWithPassword(pw)
                 .then(function () {
                     setMessage("crypto-message", "Kryptering låst opp. Du kan nå lese og skrive notater.", "success");
+
+                    // Skjul selve skjemaet når vi er låst opp
+                    var cryptoForm = $("crypto-form");
+                    if (cryptoForm) {
+                        cryptoForm.style.display = "none";
+                    }
+
+                    // Oppdater status-indikator
+                    var status = $("crypto-status");
+                    if (status) {
+                        status.textContent = "Opplåst";
+                        status.classList.remove("status-locked");
+                        status.classList.add("status-unlocked");
+                    }
+
                     if (selectedStudent) {
                         loadNotesForSelectedStudent();
                     }
@@ -453,9 +555,17 @@
                 .catch(function (err) {
                     console.error(err);
                     setMessage("crypto-message", err.message || "Klarte ikke å låse opp med dette passordet.", "error");
+
+                    var status = $("crypto-status");
+                    if (status) {
+                        status.textContent = "Låst";
+                        status.classList.remove("status-unlocked");
+                        status.classList.add("status-locked");
+                    }
                 });
         });
     }
+
     // --- Endre krypteringspassord ---
 
     function setupChangePasswordForm() {
@@ -501,6 +611,22 @@
         });
     }
 
+    // --- Lenke i venstremeny for å åpne "Endre krypteringspassord" ---
+
+    function setupChangePasswordLink() {
+        var linkBtn = $("change-password-link");
+        if (!linkBtn) return;
+
+        linkBtn.addEventListener("click", function () {
+            var sec = $("change-password-section");
+            if (!sec) return;
+
+            sec.style.display = "block";
+            sec.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+    }
+
+
 
     // --- Init ---
 
@@ -513,6 +639,7 @@
         setupUpdateStudentGraduated();
         updateRecentListUI();
         setupChangePasswordForm();
+        setupChangePasswordLink();
     }
 
     if (document.readyState === "loading") {

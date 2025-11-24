@@ -135,3 +135,21 @@ button:hover {
         flex: 1 1 auto;
     }
 }
+.status-pill {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.1rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.status-locked {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.status-unlocked {
+    background: #dcfce7;
+    color: #166534;
+}
