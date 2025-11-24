@@ -23,12 +23,12 @@ COOKIE_NAME = os.getenv("COOKIE_NAME", "notes_key")
 raw = os.getenv("ALLOWED_ORIGINS", "[]")
 ALLOWED_ORIGINS = ast.literal_eval(raw)
 
-MAIL_FROM = os.getenv("NOTES_MAIL_FROM", "no-reply@hh-utdanning.nmbu.no")
-SMTP_HOST = os.getenv("NOTES_SMTP_HOST", "localhost")
-SMTP_PORT = int(os.getenv("NOTES_SMTP_PORT", "25"))
-SMTP_USER = os.getenv("NOTES_SMTP_USER")  # kan være None
-SMTP_PASS = os.getenv("NOTES_SMTP_PASS")  # kan være None
-SMTP_STARTTLS = os.getenv("NOTES_SMTP_STARTTLS", "false").lower() == "true"
+MAIL_FROM = os.getenv("MAIL_FROM", "no-reply@example.com")
+SMTP_HOST = os.getenv("SMTP_HOST", "localhost")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "25"))
+SMTP_USER = os.getenv("SMTP_USER")  # kan være None
+SMTP_PASS = os.getenv("SMTP_PASS")  # kan være None
+SMTP_STARTTLS = os.getenv("SMTP_STARTTLS", "false").lower() == "true"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("notes-email")
 
