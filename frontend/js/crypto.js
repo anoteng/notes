@@ -219,12 +219,71 @@
         });
     }
 
+    // --- Endre passord: re-wrap DEK med nytt passord ---
+
+    function changePassword(oldPassword, newPassword) {
+        // 1) Lås opp med gammelt passord (sjekker at det stemmer og laster DEK)
+        return initWithPassword(oldPassword)
+            .then(function () {
+                if (!isReady()) {
+                    throw new Error("Klarte ikke å låse opp med nåværende passord.");
+                }
+
+                // 2) Deriver KEK fra nytt passord
+                return deriveKEKFromPassword(newPassword);
+            })
+            .then(function (newKekKey) {
+                if (!dekRaw) {
+                    throw new Error("Ingen DEK i minne.");
+                }
+
+                // 3) Krypter DEK med ny KEK (AES-GCM, iv || ciphertext)
+                var ivNew = new Uint8Array(12);
+                window.crypto.getRandomValues(ivNew);
+
+                return window.crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: ivNew },
+                    newKekKey,
+                    dekRaw
+                ).then(function (ctBuf) {
+                    var ctBytes = new Uint8Array(ctBuf);
+                    var full = new Uint8Array(ivNew.length + ctBytes.length);
+                    full.set(ivNew, 0);
+                    full.set(ctBytes, ivNew.length);
+
+                    var fullB64 = bytesToB64(full);
+
+                    // 4) Lagre ny DEK-wrapper på server
+                    return fetch(API_BASE + "/crypto/dek", {
+                        method: "POST",
+                        credentials: "include",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ dek_for_user_b64: fullB64 })
+                    }).then(function (resp) {
+                        if (!resp.ok) {
+                            return resp.text().then(function (t) {
+                                throw new Error("Klarte ikke å lagre ny nøkkel: " + t);
+                            });
+                        }
+                        dekForUserB64 = fullB64;
+                    });
+                });
+            })
+            .then(function () {
+                // DEK (dekRaw) er uendret, kun re-kryptert på server.
+                // Fra nå av må brukeren bruke det nye passordet for å låse opp i neste økt.
+                return true;
+            });
+    }
+
+
     // Eksponer som globalt objekt
     window.CryptoNotes = {
         initWithPassword: initWithPassword,
         isReady: isReady,
         encryptNote: encryptNote,
-        decryptNote: decryptNote
+        decryptNote: decryptNote,
+        changePassword: changePassword
     };
 
 })(window);

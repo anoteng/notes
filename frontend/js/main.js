@@ -456,6 +456,51 @@
                 });
         });
     }
+    // --- Endre krypteringspassord ---
+
+    function setupChangePasswordForm() {
+        var form = $("change-password-form");
+        if (!form) return;
+
+        form.addEventListener("submit", function (e) {
+            e.preventDefault();
+
+            var msgId = "change-password-message";
+            setMessage(msgId, "", null);
+
+            var oldPw = ($("old-password").value || "");
+            var newPw = ($("new-password").value || "");
+            var newPw2 = ($("new-password-repeat").value || "");
+
+            if (!oldPw || !newPw || !newPw2) {
+                setMessage(msgId, "Alle feltene må fylles ut.", "error");
+                return;
+            }
+
+            if (newPw !== newPw2) {
+                setMessage(msgId, "Nytt passord og repetisjon stemmer ikke overens.", "error");
+                return;
+            }
+
+            if (newPw === oldPw) {
+                setMessage(msgId, "Nytt passord kan ikke være likt det gamle.", "error");
+                return;
+            }
+
+            CryptoNotes.changePassword(oldPw, newPw)
+                .then(function () {
+                    setMessage(msgId, "Passord oppdatert. Neste gang du logger inn må du bruke det nye passordet.", "success");
+                    $("old-password").value = "";
+                    $("new-password").value = "";
+                    $("new-password-repeat").value = "";
+                })
+                .catch(function (err) {
+                    console.error(err);
+                    setMessage(msgId, err.message || "Klarte ikke å endre passord.", "error");
+                });
+        });
+    }
+
 
     // --- Init ---
 
@@ -467,6 +512,7 @@
         setupCreateNote();
         setupUpdateStudentGraduated();
         updateRecentListUI();
+        setupChangePasswordForm();
     }
 
     if (document.readyState === "loading") {

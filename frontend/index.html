@@ -73,6 +73,27 @@
                 </form>
                 <p id="crypto-message" class="message"></p>
             </section>
+            <!-- Endre krypteringspassord -->
+            <section class="card">
+                <h2>Endre krypteringspassord</h2>
+                <p>
+                    Bruk dette når du vil bytte passord uten å miste eksisterende notater.
+                    Systemet dekrypterer nøkkelen i nettleseren og krypterer den på nytt med det nye passordet.
+                </p>
+                <form id="change-password-form">
+                    <label for="old-password">Nåværende passord:</label>
+                    <input type="password" id="old-password" autocomplete="off">
+
+                    <label for="new-password">Nytt passord:</label>
+                    <input type="password" id="new-password" autocomplete="off">
+
+                    <label for="new-password-repeat">Gjenta nytt passord:</label>
+                    <input type="password" id="new-password-repeat" autocomplete="off">
+
+                    <button type="submit">Oppdater passord</button>
+                </form>
+                <p id="change-password-message" class="message"></p>
+            </section>
 
             <!-- Notater for valgt student -->
             <section class="card" id="notes-section" style="display:none;">
