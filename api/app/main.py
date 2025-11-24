@@ -12,6 +12,7 @@ import secrets
 import smtplib
 from email.message import EmailMessage
 from datetime import timedelta, datetime, timezone
+import logging
 
 # --- Konfig ---
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
@@ -28,6 +29,8 @@ SMTP_PORT = int(os.getenv("NOTES_SMTP_PORT", "25"))
 SMTP_USER = os.getenv("NOTES_SMTP_USER")  # kan være None
 SMTP_PASS = os.getenv("NOTES_SMTP_PASS")  # kan være None
 SMTP_STARTTLS = os.getenv("NOTES_SMTP_STARTTLS", "false").lower() == "true"
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("notes-email")
 
 def b64encode(b: bytes) -> str:
     return base64.b64encode(b).decode("ascii")
@@ -102,12 +105,31 @@ Studentnotatsystemet
 
     msg.set_content(body)
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        if SMTP_STARTTLS:
-            server.starttls()
-        if SMTP_USER and SMTP_PASS:
-            server.login(SMTP_USER, SMTP_PASS)
-        server.send_message(msg)
+    logger.info(
+        "Forsøker å sende magic link til %s via %s:%s (STARTTLS=%s, USER=%s)",
+        to_email, SMTP_HOST, SMTP_PORT, SMTP_STARTTLS, SMTP_USER or "<none>"
+    )
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+            server.set_debuglevel(1)  # logger hele SMTP-dialogen til stdout/journal
+
+            if SMTP_STARTTLS:
+                logger.info("Starter STARTTLS...")
+                server.starttls()
+
+            if SMTP_USER and SMTP_PASS:
+                logger.info("Logger inn på SMTP-server...")
+                server.login(SMTP_USER, SMTP_PASS)
+
+            server.send_message(msg)
+
+        logger.info("Magic link til %s er sendt uten feil.", to_email)
+
+    except Exception as e:
+        logger.exception("Feil ved sending av magic link til %s: %s", to_email, e)
+        # Du kan velge å la feilen boble opp, eller bare logge og la APIet late som "ok"
+        raise
 
 class StudentUpdateIn(BaseModel):
     graduated: bool
