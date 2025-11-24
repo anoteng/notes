@@ -318,7 +318,7 @@
 
         var label = $("selected-student-label");
         if (label) {
-            label.textContent = st.stud_nr + " (id " + st.id + ")";
+            label.textContent = st.stud_nr;
         }
 
         var notesSection = $("notes-section");
