@@ -11,7 +11,7 @@
 <script>
     if ("serviceWorker" in navigator) {
         window.addEventListener("load", function () {
-            navigator.serviceWorker.register("/notes/js/sw.js").catch(function (err) {
+            navigator.serviceWorker.register("/notes/sw.js").catch(function (err) {
                 console.warn("SW register feilet:", err);
             });
         });
