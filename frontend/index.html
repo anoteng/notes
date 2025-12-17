@@ -5,7 +5,18 @@
     <title>Notes – Startside</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/notes/css/styles.css">
+    <link rel="manifest" href="/notes/manifest.webmanifest">
+    <meta name="theme-color" content="#111827">
 </head>
+<script>
+    if ("serviceWorker" in navigator) {
+        window.addEventListener("load", function () {
+            navigator.serviceWorker.register("/notes/js/sw.js").catch(function (err) {
+                console.warn("SW register feilet:", err);
+            });
+        });
+    }
+</script>
 <body>
 <div class="container">
     <header class="top-bar">

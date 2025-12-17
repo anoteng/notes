@@ -1,0 +1,22 @@
+{
+  "name": "Studentnotater",
+  "short_name": "Notater",
+  "description": "Kryptert notat-app for oppfølging av enkeltstudenter.",
+  "start_url": "/notes/index.html",
+  "scope": "/notes/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#111827",
+  "icons": [
+    {
+      "src": "/notes/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/notes/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
