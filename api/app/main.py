@@ -1,6 +1,6 @@
 import ast
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, Cookie
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -20,6 +20,7 @@ DB_USER = os.getenv("DB_USER", "notes")
 DB_PASS = os.getenv("DB_PASS")  # ingen default!
 DB_NAME = os.getenv("DB_NAME", "notes")
 COOKIE_NAME = os.getenv("COOKIE_NAME", "notes_key")
+SESSION_MAX_AGE = 30 * 24 * 60 * 60  # 30 days in seconds
 raw = os.getenv("ALLOWED_ORIGINS", "[]")
 ALLOWED_ORIGINS = ast.literal_eval(raw)
 
@@ -54,6 +55,25 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+@app.middleware("http")
+async def refresh_session_cookie(request: Request, call_next):
+    """Refresh session cookie on every authenticated request to extend session with activity."""
+    response = await call_next(request)
+
+    # Skip session endpoints - they manage their own cookies
+    if request.url.path in ("/session/start", "/session/end"):
+        return response
+
+    # Only refresh if user is authenticated (cookie present and response is successful)
+    notes_key = request.cookies.get(COOKIE_NAME)
+    if notes_key and 200 <= response.status_code < 400:
+        response.set_cookie(
+            key=COOKIE_NAME, value=notes_key,
+            httponly=True, secure=True, samesite="Lax",
+            max_age=SESSION_MAX_AGE, path="/notes/api"
+        )
+    return response
 
 @contextmanager
 def db():
@@ -170,6 +190,11 @@ class RegisterOut(BaseModel):
     message: str
     api_key: Optional[str] = None  # nyttig for testing/dev
 
+class ReminderCreateIn(BaseModel):
+    note_id: int
+    title: str = Field(..., min_length=1, max_length=255)
+    reminder_at: str = Field(..., min_length=10)  # ISO date string e.g. "2025-02-15"
+
 class StudentCreateIn(BaseModel):
     stud_nr: str = Field(..., min_length=6, max_length=6)
     graduated: bool = False
@@ -178,6 +203,7 @@ class StudentCreateIn(BaseModel):
 
 def get_user_from_cookie(notes_key: Optional[str] = Cookie(default=None, alias=COOKIE_NAME)):
     if not notes_key:
+        logger.warning("Auth failed: Missing session cookie")
         raise HTTPException(status_code=401, detail="Missing session cookie")
     with db() as conn:
         cur = conn.cursor()
@@ -187,10 +213,12 @@ def get_user_from_cookie(notes_key: Optional[str] = Cookie(default=None, alias=C
         )
         row = cur.fetchone()
     if not row:
+        logger.warning("Auth failed: Invalid session (key not found in DB)")
         raise HTTPException(status_code=401, detail="Invalid session")
     uid, name, email, valid_until, active = row
     valid_until = valid_until.replace(tzinfo=timezone.utc)
     if not active or (isinstance(valid_until, datetime) and valid_until < datetime.now(timezone.utc)):
+        logger.warning("Auth failed: Session expired/inactive (active=%s, valid_until=%s)", active, valid_until)
         raise HTTPException(status_code=401, detail="Session expired/inactive")
     return {"id": uid, "name": name, "email": email}
 
@@ -210,7 +238,7 @@ def register_user(body: RegisterIn):
         row = cur.fetchone()
 
         api_key = generate_api_key()
-        valid_until = datetime.now(timezone.utc) + timedelta(days=14)  # f.eks. 1 år
+        valid_until = datetime.now(timezone.utc) + timedelta(days=60)  # f.eks. 1 år
 
         if row:
             user_id, active = row
@@ -273,7 +301,7 @@ def magic_link(body: MagicLinkIn):
         user_id, active = row
 
         api_key = generate_api_key()
-        valid_until = datetime.now(timezone.utc) + timedelta(days=14)
+        valid_until = datetime.now(timezone.utc) + timedelta(days=60)
 
         cur.execute(
             """
@@ -316,7 +344,7 @@ def session_start(body: SessionStartIn, response: Response):
     response.set_cookie(
         key=COOKIE_NAME, value=body.key,
         httponly=True, secure=True, samesite="Lax",
-        max_age=8*60*60, path="/notes/api"   # 8 timer
+        max_age=SESSION_MAX_AGE, path="/notes/api"   # 30 days
     )
     return response
 
@@ -529,3 +557,124 @@ def update_student(student_id: int, body: StudentUpdateIn, user=Depends(get_user
             "id": student_id,
             "graduated": body.graduated,
         }
+
+
+# --- Reminders ---
+
+@app.post("/reminders")
+def create_reminder(body: ReminderCreateIn, user=Depends(get_user_from_cookie)):
+    with db() as conn:
+        cur = conn.cursor()
+        # Verify note belongs to user
+        cur.execute(
+            "SELECT id FROM notes WHERE id=%s AND owner=%s AND deleted=0",
+            (body.note_id, user["id"])
+        )
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Note not found or not yours")
+
+        # Parse date
+        try:
+            reminder_dt = datetime.strptime(body.reminder_at, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+
+        # Create followup
+        cur.execute(
+            "INSERT INTO followup (note_id, title, finished) VALUES (%s, %s, 0)",
+            (body.note_id, body.title.strip())
+        )
+        followup_id = cur.lastrowid
+
+        # Create reminder with snooze token
+        token = secrets.token_urlsafe(32)
+        cur.execute(
+            "INSERT INTO reminders (followup_id, reminder_at, user_id, done, snooze_token) VALUES (%s, %s, %s, 0, %s)",
+            (followup_id, reminder_dt, user["id"], token)
+        )
+        reminder_id = cur.lastrowid
+
+    return {"ok": True, "id": reminder_id, "followup_id": followup_id}
+
+
+@app.get("/reminders")
+def list_reminders(user=Depends(get_user_from_cookie)):
+    with db() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT r.id, r.reminder_at, r.done,
+                   f.title, f.note_id,
+                   s.id AS student_id, s.stud_nr
+            FROM reminders r
+            JOIN followup f ON f.id = r.followup_id
+            JOIN notes n ON n.id = f.note_id
+            JOIN students s ON s.id = n.student
+            WHERE r.user_id = %s AND r.done = 0
+            ORDER BY r.reminder_at ASC
+        """, (user["id"],))
+        rows = cur.fetchall()
+
+    return [
+        {
+            "id": r[0],
+            "reminder_at": r[1].strftime("%Y-%m-%d") if r[1] else None,
+            "done": bool(r[2]),
+            "title": r[3],
+            "note_id": r[4],
+            "student_id": r[5],
+            "stud_nr": r[6],
+        }
+        for r in rows
+    ]
+
+
+@app.delete("/reminders/{reminder_id}")
+def delete_reminder(reminder_id: int, user=Depends(get_user_from_cookie)):
+    with db() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE reminders SET done=1 WHERE id=%s AND user_id=%s",
+            (reminder_id, user["id"])
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Reminder not found or not yours")
+    return {"ok": True}
+
+
+@app.get("/reminders/snooze")
+def snooze_reminder(token: str, days: int):
+    """Snooze a reminder via email link. No login required — token authenticates."""
+    if days not in (1, 7, 30):
+        return HTMLResponse("<html><body><h2>Ugyldig antall dager.</h2></body></html>", status_code=400)
+
+    with db() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, reminder_at FROM reminders WHERE snooze_token=%s",
+            (token,)
+        )
+        row = cur.fetchone()
+        if not row:
+            return HTMLResponse(
+                "<html><body><h2>Ugyldig eller utløpt lenke.</h2>"
+                "<p>Påminnelsen finnes ikke eller er allerede håndtert.</p></body></html>",
+                status_code=404
+            )
+
+        reminder_id, current_at = row
+        new_date = datetime.now(timezone.utc) + timedelta(days=days)
+        new_token = secrets.token_urlsafe(32)
+
+        cur.execute(
+            "UPDATE reminders SET reminder_at=%s, done=0, snooze_token=%s WHERE id=%s",
+            (new_date, new_token, reminder_id)
+        )
+
+    days_label = {1: "1 dag", 7: "1 uke", 30: "1 måned"}[days]
+    return HTMLResponse(
+        f"<html><head><meta charset='utf-8'><title>Påminnelse utsatt</title>"
+        f"<style>body{{font-family:sans-serif;max-width:500px;margin:80px auto;text-align:center}}</style></head>"
+        f"<body><h2>Påminnelse utsatt med {days_label}</h2>"
+        f"<p>Ny dato: {new_date.strftime('%Y-%m-%d')}</p>"
+        f"<p>Du kan lukke dette vinduet.</p></body></html>"
+    )

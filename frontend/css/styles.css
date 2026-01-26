@@ -153,3 +153,102 @@ button:hover {
     background: #dcfce7;
     color: #166534;
 }
+
+/* Note items with reminder button */
+.note-item {
+    position: relative;
+}
+
+.note-item .reminder-btn {
+    margin-top: 0.2rem;
+    margin-left: 0.5rem;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.75rem;
+    background: #6366f1;
+    display: inline;
+}
+
+.note-item .reminder-btn:hover {
+    background: #4f46e5;
+}
+
+/* Inline reminder form */
+.reminder-form-inline {
+    margin-top: 0.4rem;
+    padding: 0.6rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+}
+
+.reminder-form-inline label {
+    margin-top: 0.3rem;
+    font-size: 0.85rem;
+}
+
+.reminder-form-inline input[type="text"],
+.reminder-form-inline input[type="date"] {
+    width: 100%;
+    padding: 0.35rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid #cbd5e1;
+    box-sizing: border-box;
+    font-size: 0.85rem;
+}
+
+.reminder-quick-buttons {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.reminder-quick-buttons button {
+    margin-top: 0;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.75rem;
+    background: #6366f1;
+}
+
+.reminder-quick-buttons button:hover {
+    background: #4f46e5;
+}
+
+.reminder-quick-buttons .cancel-btn {
+    background: #94a3b8;
+}
+
+.reminder-quick-buttons .cancel-btn:hover {
+    background: #64748b;
+}
+
+/* Reminder list items */
+.reminder-item {
+    padding: 0.5rem 0.2rem;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+}
+
+.reminder-item .reminder-info {
+    flex: 1;
+}
+
+.reminder-item .reminder-date {
+    color: #6366f1;
+    font-weight: 500;
+    margin-right: 0.5rem;
+}
+
+.reminder-item .reminder-cancel-btn {
+    margin-top: 0;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.75rem;
+    background: #ef4444;
+}
+
+.reminder-item .reminder-cancel-btn:hover {
+    background: #dc2626;
+}

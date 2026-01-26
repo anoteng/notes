@@ -422,11 +422,25 @@
                 CryptoNotes.decryptNote(n.ciphertext_b64, n.nonce_b64)
                     .then(function (plaintext) {
                         var li = document.createElement("li");
-                        li.textContent = "[" + n.created + "] " + plaintext;
                         li.classList.add("note-item");
+
+                        var textSpan = document.createElement("span");
+                        textSpan.textContent = "[" + n.created + "] " + plaintext;
+                        li.appendChild(textSpan);
+
+                        var reminderBtn = document.createElement("button");
+                        reminderBtn.textContent = "Påminnelse";
+                        reminderBtn.className = "reminder-btn";
+                        reminderBtn.addEventListener("click", function () {
+                            showReminderForm(li, n.id);
+                        });
+                        li.appendChild(reminderBtn);
+
                         list.appendChild(li);
                     });
             });
+
+            loadRemindersForStudent();
         }).catch(function (err) {
             console.error(err);
             setMessage(msgId, err.message || "Klarte ikke å kontakte tjeneren.", "error");
@@ -563,6 +577,196 @@
                         status.classList.add("status-locked");
                     }
                 });
+        });
+    }
+
+    // --- Påminnelser ---
+
+    function addDays(days) {
+        var d = new Date();
+        d.setDate(d.getDate() + days);
+        return d.toISOString().slice(0, 10);
+    }
+
+    function showReminderForm(noteLi, noteId) {
+        // Remove any existing form
+        var existing = noteLi.querySelector(".reminder-form-inline");
+        if (existing) {
+            existing.remove();
+            return;
+        }
+
+        var formDiv = document.createElement("div");
+        formDiv.className = "reminder-form-inline";
+
+        var titleLabel = document.createElement("label");
+        titleLabel.textContent = "Tittel (vises i e-post):";
+        var titleInput = document.createElement("input");
+        titleInput.type = "text";
+        titleInput.placeholder = "F.eks. Følg opp eksamensdiskusjon";
+
+        var dateLabel = document.createElement("label");
+        dateLabel.textContent = "Dato:";
+        var dateInput = document.createElement("input");
+        dateInput.type = "date";
+        dateInput.value = addDays(7);
+
+        var btnRow = document.createElement("div");
+        btnRow.className = "reminder-quick-buttons";
+
+        function createReminder(title, date) {
+            if (!title) {
+                alert("Tittel kan ikke være tom.");
+                return;
+            }
+            fetch(API_BASE + "/reminders", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    note_id: noteId,
+                    title: title,
+                    reminder_at: date
+                })
+            }).then(function (resp) {
+                if (resp.status === 401) {
+                    window.location.href = "/notes/login.html";
+                    return;
+                }
+                return resp.json();
+            }).then(function (data) {
+                if (data && data.ok) {
+                    formDiv.remove();
+                    loadRemindersForStudent();
+                }
+            }).catch(function (err) {
+                console.error(err);
+            });
+        }
+
+        var btn1d = document.createElement("button");
+        btn1d.type = "button";
+        btn1d.textContent = "+1 dag";
+        btn1d.addEventListener("click", function () {
+            createReminder(titleInput.value.trim(), addDays(1));
+        });
+
+        var btn1w = document.createElement("button");
+        btn1w.type = "button";
+        btn1w.textContent = "+1 uke";
+        btn1w.addEventListener("click", function () {
+            createReminder(titleInput.value.trim(), addDays(7));
+        });
+
+        var btn1m = document.createElement("button");
+        btn1m.type = "button";
+        btn1m.textContent = "+1 måned";
+        btn1m.addEventListener("click", function () {
+            createReminder(titleInput.value.trim(), addDays(30));
+        });
+
+        var btnCustom = document.createElement("button");
+        btnCustom.type = "button";
+        btnCustom.textContent = "Lagre";
+        btnCustom.addEventListener("click", function () {
+            createReminder(titleInput.value.trim(), dateInput.value);
+        });
+
+        var btnCancel = document.createElement("button");
+        btnCancel.type = "button";
+        btnCancel.textContent = "Avbryt";
+        btnCancel.className = "cancel-btn";
+        btnCancel.addEventListener("click", function () {
+            formDiv.remove();
+        });
+
+        btnRow.appendChild(btn1d);
+        btnRow.appendChild(btn1w);
+        btnRow.appendChild(btn1m);
+        btnRow.appendChild(btnCustom);
+        btnRow.appendChild(btnCancel);
+
+        formDiv.appendChild(titleLabel);
+        formDiv.appendChild(titleInput);
+        formDiv.appendChild(dateLabel);
+        formDiv.appendChild(dateInput);
+        formDiv.appendChild(btnRow);
+
+        noteLi.appendChild(formDiv);
+    }
+
+    function loadRemindersForStudent() {
+        var container = $("reminders-container");
+        var list = $("reminders-list");
+        var msgId = "reminders-message";
+
+        if (!container || !list) return;
+        list.innerHTML = "";
+        setMessage(msgId, "", null);
+
+        if (!selectedStudent) {
+            container.style.display = "none";
+            return;
+        }
+
+        fetch(API_BASE + "/reminders", {
+            method: "GET",
+            credentials: "include"
+        }).then(function (resp) {
+            if (resp.status === 401) {
+                window.location.href = "/notes/login.html";
+                throw new Error("Unauthorized");
+            }
+            return resp.json();
+        }).then(function (data) {
+            // Filter to current student
+            var studentReminders = data.filter(function (r) {
+                return r.student_id === selectedStudent.id;
+            });
+
+            if (!studentReminders.length) {
+                container.style.display = "none";
+                return;
+            }
+
+            container.style.display = "block";
+
+            studentReminders.forEach(function (r) {
+                var li = document.createElement("li");
+                li.className = "reminder-item";
+
+                var info = document.createElement("span");
+                info.className = "reminder-info";
+
+                var dateSpan = document.createElement("span");
+                dateSpan.className = "reminder-date";
+                dateSpan.textContent = r.reminder_at;
+                info.appendChild(dateSpan);
+
+                var titleSpan = document.createElement("span");
+                titleSpan.textContent = r.title;
+                info.appendChild(titleSpan);
+
+                var cancelBtn = document.createElement("button");
+                cancelBtn.textContent = "Slett";
+                cancelBtn.className = "reminder-cancel-btn";
+                cancelBtn.addEventListener("click", function () {
+                    fetch(API_BASE + "/reminders/" + r.id, {
+                        method: "DELETE",
+                        credentials: "include"
+                    }).then(function (resp) {
+                        if (resp.ok) {
+                            loadRemindersForStudent();
+                        }
+                    });
+                });
+
+                li.appendChild(info);
+                li.appendChild(cancelBtn);
+                list.appendChild(li);
+            });
+        }).catch(function (err) {
+            console.error(err);
         });
     }
 
